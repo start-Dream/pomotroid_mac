@@ -252,6 +252,7 @@ fn listen_events(
                     websocket::broadcast_started(&ws, total_secs);
                 }
                 tray::update_menu_items(&tray, true, false);
+                crate::badge::set_badge(&app, Some(&format!("{:02}:{:02}", total_secs / 60, total_secs % 60)));
             }
 
             TimerEvent::Tick { elapsed_secs, total_secs } => {
@@ -264,6 +265,11 @@ fn listen_events(
                     "timer:tick",
                     serde_json::json!({ "elapsed_secs": elapsed_secs, "total_secs": total_secs }),
                 );
+
+                let remaining = total_secs.saturating_sub(elapsed_secs);
+                let m = remaining / 60;
+                let s = remaining % 60;
+                crate::badge::set_badge(&app, Some(&format!("{:02}:{:02}", m, s)));
 
                 // --- Session recording: start on first tick of a new round ---
                 if elapsed_secs == 1 && current_session_id.is_none() {
@@ -314,6 +320,11 @@ fn listen_events(
                     }
                 }
 
+                // Bounce the macOS Dock icon if not skipped
+                if !was_skipped {
+                    crate::badge::bounce_dock(&app);
+                }
+
                 // Advance sequence.
                 let (next_round, next_duration, auto_start_work, auto_start_break) = {
                     let mut seq = sequence.lock().unwrap();
@@ -337,6 +348,7 @@ fn listen_events(
 
                 // Emit round-change with the new snapshot.
                 let snapshot = build_snapshot(&sequence, &settings, &shared);
+                crate::badge::set_badge(&app, None);
                 let _ = app.emit("timer:round-change", snapshot);
 
                 // Desktop notifications are dispatched by the frontend via the
@@ -450,6 +462,7 @@ fn listen_events(
                     s.is_running = false;
                 }
                 let snapshot = build_snapshot(&sequence, &settings, &shared);
+                crate::badge::set_badge(&app, None);
                 let _ = app.emit("timer:reset", snapshot);
                 if let Some(ws) = app.try_state::<Arc<WsState>>() {
                     websocket::broadcast_reset(&ws);

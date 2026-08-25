@@ -1,0 +1,51 @@
+--- src-tauri/src/lib.rs
++++ src-tauri/src/lib.rs
+@@ -324,14 +324,24 @@
+             main_window.on_window_event(move |event| {
+                 match event {
+                     tauri::WindowEvent::CloseRequested { api, .. } => {
+-                        let hide = db_for_close
++                        let mut hide = db_for_close
+                             .lock()
+                             .ok()
+                             .and_then(|conn| settings::load(&conn).ok())
+                             .map(|s| s.min_to_tray_on_close)
+                             .unwrap_or(false);
++
++                        #[cfg(target_os = "macos")]
++                        {
++                            hide = true;
++                        }
++
+                         if hide {
+                             api.prevent_close();
+                             let _ = win_for_close.hide();
++                            
++                            #[cfg(target_os = "macos")]
++                            {
++                                for label in ["settings", "stats"] {
++                                    if let Some(win) = app_for_close.get_webview_window(label) {
++                                        let _ = win.close();
++                                    }
++                                }
++                            }
+                         } else {
+                             // Main window is truly closing — close child windows if open.
+@@ -403,6 +413,15 @@
+             check_update,
+             install_update,
+         ])
+-        .run(tauri::generate_context!())
+-        .expect("error while running tauri application");
++        .build(tauri::generate_context!())
++        .expect("error while building tauri application")
++        .run(|app_handle, event| {
++            if let tauri::RunEvent::Reopen { .. } = event {
++                if let Some(window) = app_handle.get_webview_window("main") {
++                    let _ = window.show();
++                    let _ = window.unminimize();
++                    let _ = window.set_focus();
++                }
++            }
++        });
+ }

@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod badge;
 pub mod commands;
 pub mod db;
 pub mod notifications;
